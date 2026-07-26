@@ -219,11 +219,11 @@ class CallController extends GetxController {
 
       case 'ice_candidate':
         final candidateData = msg['candidate'];
-        if (candidateData != null) {
+        if (candidateData != null && candidateData['candidate'] != null) {
           final candidate = webrtc.RTCIceCandidate(
             candidateData['candidate'],
-            candidateData['sdpMid'],
-            candidateData['sdpMLineIndex'],
+            candidateData['sdpMid'] ?? '0',
+            candidateData['sdpMLineIndex'] ?? 0,
           );
           await _addOrBufferIceCandidate(candidate);
         }
@@ -322,6 +322,7 @@ class CallController extends GetxController {
           _remoteStream!.addTrack(event.track);
         }
 
+        remoteRenderer.srcObject = null;
         remoteRenderer.srcObject = _remoteStream;
 
         Future.microtask(() {
@@ -345,14 +346,16 @@ class CallController extends GetxController {
     };
 
     _peerConnection?.onIceCandidate = (webrtc.RTCIceCandidate candidate) {
-      signalingService.sendIceCandidate(
-        targetUserId: currentRemoteUserId.value,
-        candidate: {
-          'candidate': candidate.candidate,
-          'sdpMid': candidate.sdpMid,
-          'sdpMLineIndex': candidate.sdpMLineIndex,
-        },
-      );
+      if (candidate.candidate != null && candidate.candidate!.isNotEmpty) {
+        signalingService.sendIceCandidate(
+          targetUserId: currentRemoteUserId.value,
+          candidate: {
+            'candidate': candidate.candidate,
+            'sdpMid': candidate.sdpMid ?? '0',
+            'sdpMLineIndex': candidate.sdpMLineIndex ?? 0,
+          },
+        );
+      }
     };
 
     _peerConnection?.onIceConnectionState = (webrtc.RTCIceConnectionState state) {

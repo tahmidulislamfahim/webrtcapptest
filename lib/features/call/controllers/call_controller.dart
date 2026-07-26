@@ -29,6 +29,7 @@ class CallController extends GetxController {
   final RxBool isMuted = false.obs;
   final RxBool isVideoOff = false.obs;
   final RxBool isSpeakerOn = true.obs;
+  final RxBool isRemoteVideoReady = false.obs;
 
   final RxString currentRemoteUserId = ''.obs;
   final RxString currentRemoteName = ''.obs;
@@ -41,6 +42,8 @@ class CallController extends GetxController {
       {'urls': 'stun:stun2.l.google.com:19302'},
       {'urls': 'stun:stun3.l.google.com:19302'},
       {'urls': 'stun:stun4.l.google.com:19302'},
+      {'urls': 'stun:stun.services.mozilla.com'},
+      {'urls': 'stun:global.stun.twilio.com:3478'},
       {
         'urls': 'turn:openrelay.metered.ca:80',
         'username': 'openrelay',
@@ -122,6 +125,7 @@ class CallController extends GetxController {
     if (!hasPermissions) return;
 
     isVideoCall.value = video;
+    isRemoteVideoReady.value = false;
     currentRemoteUserId.value = targetUserId;
     currentRemoteName.value = targetName;
     callState.value = CallState.outgoing;
@@ -152,6 +156,7 @@ class CallController extends GetxController {
         currentRemoteName.value = msg['callerName'] ?? 'Unknown Caller';
         currentRoomId.value = msg['roomId'] ?? '';
         isVideoCall.value = msg['isVideo'] ?? true;
+        isRemoteVideoReady.value = false;
         callState.value = CallState.incoming;
 
         _startRingingVibration();
@@ -197,14 +202,7 @@ class CallController extends GetxController {
         await _peerConnection?.setRemoteDescription(webrtc.RTCSessionDescription(sdp['sdp'], sdp['type']));
         await _drainIceCandidatesBuffer();
 
-        final answerOptions = <String, dynamic>{
-          'mandatory': {
-            'OfferToReceiveAudio': true,
-            'OfferToReceiveVideo': isVideoCall.value,
-          },
-          'optional': [],
-        };
-        final answer = await _peerConnection?.createAnswer(answerOptions);
+        final answer = await _peerConnection?.createAnswer({});
         await _peerConnection?.setLocalDescription(answer!);
 
         signalingService.sendAnswer(
@@ -292,13 +290,7 @@ class CallController extends GetxController {
       'audio': true,
       'video': isVideoCall.value
           ? {
-              'mandatory': {
-                'minWidth': '640',
-                'minHeight': '480',
-                'minFrameRate': '30',
-              },
               'facingMode': 'user',
-              'optional': [],
             }
           : false,
     };
@@ -313,22 +305,30 @@ class CallController extends GetxController {
   Future<void> _createPeerConnection() async {
     _peerConnection = await webrtc.createPeerConnection(_iceServers);
 
-    _remoteStream = await webrtc.createLocalMediaStream('remote_stream');
-
     _localStream?.getTracks().forEach((track) {
       _peerConnection?.addTrack(track, _localStream!);
     });
 
     _peerConnection?.onTrack = (webrtc.RTCTrackEvent event) async {
       debugPrint('📺 WebRTC onTrack: track.kind=${event.track.kind}, id=${event.track.id}');
-      
-      if (event.streams.isNotEmpty) {
-        remoteRenderer.srcObject = event.streams[0];
-      } else {
-        _remoteStream?.addTrack(event.track);
+
+      if (event.track.kind == 'video') {
+        event.track.enabled = true;
+
+        if (event.streams.isNotEmpty) {
+          _remoteStream = event.streams[0];
+        } else {
+          _remoteStream ??= await webrtc.createLocalMediaStream('remote_stream');
+          _remoteStream!.addTrack(event.track);
+        }
+
         remoteRenderer.srcObject = _remoteStream;
+
+        Future.microtask(() {
+          isRemoteVideoReady.value = true;
+        });
       }
-      
+
       if (event.track.kind == 'audio') {
         event.track.enabled = true;
         webrtc.Helper.setSpeakerphoneOn(isSpeakerOn.value);
@@ -339,6 +339,9 @@ class CallController extends GetxController {
       debugPrint('📺 WebRTC onAddStream: stream.id=${stream.id}');
       _remoteStream = stream;
       remoteRenderer.srcObject = _remoteStream;
+      Future.microtask(() {
+        isRemoteVideoReady.value = true;
+      });
     };
 
     _peerConnection?.onIceCandidate = (webrtc.RTCIceCandidate candidate) {
@@ -354,6 +357,10 @@ class CallController extends GetxController {
 
     _peerConnection?.onIceConnectionState = (webrtc.RTCIceConnectionState state) {
       debugPrint('🧊 ICE Connection State: $state');
+      if (state == webrtc.RTCIceConnectionState.RTCIceConnectionStateFailed) {
+        debugPrint('⚠️ ICE Failed! Attempting ICE restart...');
+        _peerConnection?.restartIce();
+      }
     };
 
     _peerConnection?.onConnectionState = (webrtc.RTCPeerConnectionState state) {
@@ -362,14 +369,7 @@ class CallController extends GetxController {
   }
 
   Future<void> _createAndSendOffer() async {
-    final offerOptions = <String, dynamic>{
-      'mandatory': {
-        'OfferToReceiveAudio': true,
-        'OfferToReceiveVideo': isVideoCall.value,
-      },
-      'optional': [],
-    };
-    final offer = await _peerConnection?.createOffer(offerOptions);
+    final offer = await _peerConnection?.createOffer({});
     await _peerConnection?.setLocalDescription(offer!);
 
     signalingService.sendOffer(
@@ -432,6 +432,7 @@ class CallController extends GetxController {
     isMuted.value = false;
     isVideoOff.value = false;
     isSpeakerOn.value = true;
+    isRemoteVideoReady.value = false;
     currentRemoteUserId.value = '';
     currentRemoteName.value = '';
     currentRoomId.value = '';

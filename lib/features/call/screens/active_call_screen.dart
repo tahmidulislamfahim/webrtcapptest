@@ -14,50 +14,83 @@ class ActiveCallScreen extends GetView<CallController> {
       body: SafeArea(
         child: Stack(
           children: [
-            // 1. Remote Video View / Audio Call View
-            Obx(() {
-              if (controller.isVideoCall.value) {
-                return RTCVideoView(
-                  controller.remoteRenderer,
-                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                );
-              }
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircleAvatar(
-                      radius: 60,
-                      backgroundColor: AppColor.primary.withValues(alpha: 0.2),
-                      child: Text(
-                        controller.currentRemoteName.value.isNotEmpty
-                            ? controller.currentRemoteName.value[0].toUpperCase()
-                            : 'U',
-                        style: const TextStyle(
-                          fontSize: 48,
-                          fontWeight: FontWeight.bold,
-                          color: AppColor.primary,
+            // 1. Remote Video View / Audio Call View (ALWAYS Positioned.fill to prevent 0x0 layout collapse)
+            Positioned.fill(
+              child: Obx(() {
+                if (controller.isVideoCall.value) {
+                  final isReady = controller.isRemoteVideoReady.value;
+                  if (!isReady || controller.remoteRenderer.srcObject == null) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircleAvatar(
+                            radius: 50,
+                            backgroundColor: AppColor.primary.withValues(alpha: 0.2),
+                            child: Text(
+                              controller.currentRemoteName.value.isNotEmpty
+                                  ? controller.currentRemoteName.value[0].toUpperCase()
+                                  : 'U',
+                              style: const TextStyle(
+                                fontSize: 36,
+                                fontWeight: FontWeight.bold,
+                                color: AppColor.primary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          const CircularProgressIndicator(color: AppColor.primary),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Connecting video stream...',
+                            style: TextStyle(color: AppColor.textMuted, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return RTCVideoView(
+                    controller.remoteRenderer,
+                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                  );
+                }
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircleAvatar(
+                        radius: 60,
+                        backgroundColor: AppColor.primary.withValues(alpha: 0.2),
+                        child: Text(
+                          controller.currentRemoteName.value.isNotEmpty
+                              ? controller.currentRemoteName.value[0].toUpperCase()
+                              : 'U',
+                          style: const TextStyle(
+                            fontSize: 48,
+                            fontWeight: FontWeight.bold,
+                            color: AppColor.primary,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      controller.currentRemoteName.value,
-                      style: const TextStyle(
-                        color: AppColor.textMain,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                      const SizedBox(height: 20),
+                      Text(
+                        controller.currentRemoteName.value,
+                        style: const TextStyle(
+                          color: AppColor.textMain,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Ongoing Audio Call',
-                      style: TextStyle(color: AppColor.textMuted, fontSize: 16),
-                    ),
-                  ],
-                ),
-              );
-            }),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Ongoing Audio Call',
+                        style: TextStyle(color: AppColor.textMuted, fontSize: 16),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
 
             // 2. Picture-in-Picture Local Camera View (Video Calls only)
             Obx(() {

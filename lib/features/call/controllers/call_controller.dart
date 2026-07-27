@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter_webrtc/flutter_webrtc.dart' as webrtc;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
+import '../../../core/api_endpoint/api_endpoint.dart';
 import '../../../core/services/local_service/shared_preferences_helper.dart';
 import '../../../routes/app_routes.dart';
 import '../service/foreground_call_service.dart';
@@ -36,35 +39,13 @@ class CallController extends GetxController {
   final RxString currentRemoteName = ''.obs;
   final RxString currentRoomId = ''.obs;
 
-  final Map<String, dynamic> _iceServers = {
+  Map<String, dynamic> _iceServers = {
     'iceServers': [
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},
       {'urls': 'stun:stun2.l.google.com:19302'},
       {'urls': 'stun:stun3.l.google.com:19302'},
       {'urls': 'stun:stun4.l.google.com:19302'},
-      {'urls': 'stun:stun.services.mozilla.com'},
-      {'urls': 'stun:global.stun.twilio.com:3478'},
-      {
-        'urls': 'turn:openrelay.metered.ca:80',
-        'username': 'openrelay',
-        'credential': 'openrelay'
-      },
-      {
-        'urls': 'turn:openrelay.metered.ca:443',
-        'username': 'openrelay',
-        'credential': 'openrelay'
-      },
-      {
-        'urls': 'turn:openrelay.metered.ca:443?transport=tcp',
-        'username': 'openrelay',
-        'credential': 'openrelay'
-      },
-      {
-        'urls': 'turns:openrelay.metered.ca:443?transport=tcp',
-        'username': 'openrelay',
-        'credential': 'openrelay'
-      },
     ],
     'sdpSemantics': 'unified-plan',
   };
@@ -73,8 +54,28 @@ class CallController extends GetxController {
   void onInit() {
     super.onInit();
     _initRenderers();
+    fetchIceServers();
     connectSignaling();
     ForegroundCallService.initForegroundTask();
+  }
+
+  Future<void> fetchIceServers() async {
+    try {
+      final response = await http.get(Uri.parse('${ApiEndpoint.baseUrl}/api/ice-servers'));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['iceServers'] != null && data['iceServers'] is List) {
+          final List<dynamic> servers = data['iceServers'];
+          _iceServers = {
+            'iceServers': servers,
+            'sdpSemantics': 'unified-plan',
+          };
+          debugPrint('✅ WebRTC ICE Servers updated from backend (${servers.length} servers, source: ${data['source']})');
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ Failed to fetch dynamic ICE servers: $e');
+    }
   }
 
   Future<void> _initRenderers() async {

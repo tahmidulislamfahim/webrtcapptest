@@ -60,6 +60,11 @@ class CallController extends GetxController {
         'username': 'openrelay',
         'credential': 'openrelay'
       },
+      {
+        'urls': 'turns:openrelay.metered.ca:443?transport=tcp',
+        'username': 'openrelay',
+        'credential': 'openrelay'
+      },
     ],
     'sdpSemantics': 'unified-plan',
   };

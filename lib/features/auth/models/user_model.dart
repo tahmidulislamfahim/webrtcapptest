@@ -12,11 +12,21 @@ class UserModel {
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    final rawOnline = json['is_online'] ?? json['isOnline'] ?? json['online'];
+    bool parsedOnline = false;
+    if (rawOnline is bool) {
+      parsedOnline = rawOnline;
+    } else if (rawOnline is int) {
+      parsedOnline = rawOnline == 1;
+    } else if (rawOnline is String) {
+      parsedOnline = rawOnline.toLowerCase() == 'true' || rawOnline == '1';
+    }
+
     return UserModel(
-      id: json['id']?.toString() ?? '',
+      id: json['id']?.toString() ?? json['_id']?.toString() ?? '',
       username: json['username']?.toString() ?? '',
-      displayName: json['display_name']?.toString() ?? json['username']?.toString() ?? '',
-      isOnline: json['is_online'] as bool? ?? false,
+      displayName: json['display_name']?.toString() ?? json['displayName']?.toString() ?? json['username']?.toString() ?? '',
+      isOnline: parsedOnline,
     );
   }
 

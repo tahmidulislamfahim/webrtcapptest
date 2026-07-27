@@ -11,8 +11,9 @@ class SignalingService {
   Function(Map<String, dynamic> message)? _onMessageCallback;
   Timer? _pingTimer;
   Timer? _reconnectTimer;
+  int _failedPings = 0;
 
-  bool get isConnected => _isConnected;
+  bool get isConnected => _isConnected && _channel != null;
 
   void connect({
     required String userId,
@@ -23,18 +24,25 @@ class SignalingService {
     _lastUserId = userId;
     _onMessageCallback = onMessage;
 
-    if (_isConnected) return;
+    if (_isConnected && _channel != null) {
+      debugPrint('🔌 WebSocket already connected for user $userId');
+      return;
+    }
 
     final wsUrl = ApiEndpoint.userWebSocket(userId);
     debugPrint('🔌 Connecting WebSocket to $wsUrl');
-    
+
+    _cleanUpSocket();
+
     try {
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
       _isConnected = true;
+      _failedPings = 0;
       _startHeartbeat();
 
       _channel!.stream.listen(
         (message) {
+          _failedPings = 0; // Reset failed count when any data arrives from server
           try {
             final Map<String, dynamic> data = jsonDecode(message);
             if (data['type'] == 'pong') return;
@@ -44,12 +52,12 @@ class SignalingService {
           }
         },
         onError: (err) {
-          debugPrint('⚠️ WebSocket error: $err');
+          debugPrint('⚠️ WebSocket stream error: $err');
           _handleDisconnect();
           if (onError != null) onError(err);
         },
         onDone: () {
-          debugPrint('⚠️ WebSocket disconnected.');
+          debugPrint('⚠️ WebSocket connection closed (onDone).');
           _handleDisconnect();
           if (onDone != null) onDone();
         },
@@ -60,25 +68,47 @@ class SignalingService {
     }
   }
 
+  void checkConnection() {
+    if (!isConnected) {
+      if (_lastUserId != null && _onMessageCallback != null) {
+        debugPrint('🔌 Connection check failed: Reconnecting WebSocket for user $_lastUserId...');
+        connect(userId: _lastUserId!, onMessage: _onMessageCallback!);
+      }
+    }
+  }
+
   void _startHeartbeat() {
     _pingTimer?.cancel();
     _pingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (_isConnected && _channel != null) {
+      if (isConnected) {
+        _failedPings++;
+        if (_failedPings > 3) {
+          debugPrint('⚠️ WebSocket missed 3 ping heartbeats. Forcing reconnect...');
+          _handleDisconnect();
+          return;
+        }
         sendMessage({'type': 'ping'});
       }
     });
   }
 
-  void _handleDisconnect() {
-    _isConnected = false;
+  void _cleanUpSocket() {
     _pingTimer?.cancel();
-    _channel?.sink.close();
+    _pingTimer = null;
+    try {
+      _channel?.sink.close();
+    } catch (_) {}
     _channel = null;
+    _isConnected = false;
+  }
+
+  void _handleDisconnect() {
+    _cleanUpSocket();
 
     // Schedule auto-reconnect after network drop/switch
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 3), () {
-      if (!_isConnected && _lastUserId != null && _onMessageCallback != null) {
+    _reconnectTimer = Timer(const Duration(seconds: 2), () {
+      if (!isConnected && _lastUserId != null && _onMessageCallback != null) {
         debugPrint('🔄 Auto-reconnecting WebSocket for user $_lastUserId...');
         connect(userId: _lastUserId!, onMessage: _onMessageCallback!);
       }
@@ -87,7 +117,15 @@ class SignalingService {
 
   void sendMessage(Map<String, dynamic> message) {
     if (_channel != null && _isConnected) {
-      _channel!.sink.add(jsonEncode(message));
+      try {
+        _channel!.sink.add(jsonEncode(message));
+      } catch (e) {
+        debugPrint('⚠️ Error adding message to WebSocket sink: $e');
+        _handleDisconnect();
+      }
+    } else {
+      debugPrint('⚠️ WebSocket not connected. Message dropped: ${message['type']}');
+      _handleDisconnect();
     }
   }
 
@@ -163,10 +201,10 @@ class SignalingService {
   }
 
   void disconnect() {
-    _isConnected = false;
-    _pingTimer?.cancel();
+    _cleanUpSocket();
     _reconnectTimer?.cancel();
-    _channel?.sink.close();
-    _channel = null;
+    _reconnectTimer = null;
+    _lastUserId = null;
+    _onMessageCallback = null;
   }
 }

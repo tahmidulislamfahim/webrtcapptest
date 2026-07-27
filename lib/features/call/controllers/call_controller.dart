@@ -15,7 +15,7 @@ import '../service/signaling_service.dart';
 
 enum CallState { idle, outgoing, incoming, active }
 
-class CallController extends GetxController {
+class CallController extends GetxController with WidgetsBindingObserver {
   final SignalingService signalingService = SignalingService();
 
   final webrtc.RTCVideoRenderer localRenderer = webrtc.RTCVideoRenderer();
@@ -53,10 +53,20 @@ class CallController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    WidgetsBinding.instance.addObserver(this);
     _initRenderers();
     fetchIceServers();
     connectSignaling();
     ForegroundCallService.initForegroundTask();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('📱 App Resumed from Background: Re-checking WebSocket signaling connection...');
+      signalingService.checkConnection();
+      connectSignaling();
+    }
   }
 
   Future<void> fetchIceServers() async {
@@ -466,6 +476,7 @@ class CallController extends GetxController {
 
   @override
   void onClose() {
+    WidgetsBinding.instance.removeObserver(this);
     _stopRingingFeedback();
     endCall(notifyPeer: true);
     localRenderer.dispose();

@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../../../core/services/local_service/shared_preferences_helper.dart';
 import '../../../routes/app_routes.dart';
 import '../../auth/models/user_model.dart';
+import '../../call/controllers/call_controller.dart';
 import '../service/users_service.dart';
 
 class UsersController extends GetxController {
@@ -36,6 +37,10 @@ class UsersController extends GetxController {
       if (showLoader) isLoading.value = true;
       final result = await _usersService.fetchUsers();
       users.assignAll(result);
+
+      if (Get.isRegistered<CallController>()) {
+        Get.find<CallController>().signalingService.checkConnection();
+      }
     } catch (e) {
       debugPrint('UsersController loadUsers error: $e');
       if (e.toString().contains('UNAUTHORIZED')) {

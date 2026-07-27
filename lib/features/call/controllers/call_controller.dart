@@ -60,21 +60,6 @@ class CallController extends GetxController {
         'username': 'openrelay',
         'credential': 'openrelay'
       },
-      {
-        'urls': 'turns:openrelay.metered.ca:443?transport=tcp',
-        'username': 'openrelay',
-        'credential': 'openrelay'
-      },
-      {
-        'urls': 'turn:stun.free-stun.com:3478',
-        'username': 'freestun',
-        'credential': 'freestun'
-      },
-      {
-        'urls': 'turns:stun.free-stun.com:5349',
-        'username': 'freestun',
-        'credential': 'freestun'
-      },
     ],
     'sdpSemantics': 'unified-plan',
   };
@@ -388,9 +373,8 @@ class CallController extends GetxController {
 
     _peerConnection?.onIceConnectionState = (webrtc.RTCIceConnectionState state) {
       debugPrint('🧊 ICE Connection State: $state');
-      if (state == webrtc.RTCIceConnectionState.RTCIceConnectionStateFailed ||
-          state == webrtc.RTCIceConnectionState.RTCIceConnectionStateDisconnected) {
-        debugPrint('⚠️ ICE Failed or Disconnected! Attempting ICE restart...');
+      if (state == webrtc.RTCIceConnectionState.RTCIceConnectionStateFailed) {
+        debugPrint('⚠️ ICE Failed! Attempting ICE restart...');
         _peerConnection?.restartIce();
       }
     };

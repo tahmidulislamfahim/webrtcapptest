@@ -60,6 +60,21 @@ class CallController extends GetxController {
         'username': 'openrelay',
         'credential': 'openrelay'
       },
+      {
+        'urls': 'turns:openrelay.metered.ca:443?transport=tcp',
+        'username': 'openrelay',
+        'credential': 'openrelay'
+      },
+      {
+        'urls': 'turn:stun.free-stun.com:3478',
+        'username': 'freestun',
+        'credential': 'freestun'
+      },
+      {
+        'urls': 'turns:stun.free-stun.com:5349',
+        'username': 'freestun',
+        'credential': 'freestun'
+      },
     ],
     'sdpSemantics': 'unified-plan',
   };
@@ -305,8 +320,32 @@ class CallController extends GetxController {
     _localStream = await webrtc.navigator.mediaDevices.getUserMedia(mediaConstraints);
     localRenderer.srcObject = _localStream;
 
-    // Enable speakerphone hardware routing
-    webrtc.Helper.setSpeakerphoneOn(isSpeakerOn.value);
+    // Enable speakerphone hardware routing after media setup
+    Future.delayed(const Duration(milliseconds: 300), () {
+      webrtc.Helper.setSpeakerphoneOn(isSpeakerOn.value);
+    });
+  }
+
+  void _attachRemoteStream(webrtc.MediaStream stream) {
+    debugPrint('🎥 Attaching Remote MediaStream: ${stream.id}, tracks=${stream.getTracks().length}');
+    _remoteStream = stream;
+
+    for (var track in stream.getTracks()) {
+      track.enabled = true;
+    }
+
+    remoteRenderer.srcObject = null;
+    remoteRenderer.srcObject = stream;
+
+    // Delayed speakerphone routing to prevent Android MODE_IN_COMMUNICATION override
+    Future.delayed(const Duration(milliseconds: 500), () {
+      webrtc.Helper.setSpeakerphoneOn(isSpeakerOn.value);
+    });
+
+    isRemoteVideoReady.value = false;
+    Future.microtask(() {
+      isRemoteVideoReady.value = true;
+    });
   }
 
   Future<void> _createPeerConnection() async {
@@ -318,38 +357,20 @@ class CallController extends GetxController {
 
     _peerConnection?.onTrack = (webrtc.RTCTrackEvent event) async {
       debugPrint('📺 WebRTC onTrack: track.kind=${event.track.kind}, id=${event.track.id}');
+      event.track.enabled = true;
 
-      if (event.track.kind == 'video') {
-        event.track.enabled = true;
-
-        if (event.streams.isNotEmpty) {
-          _remoteStream = event.streams[0];
-        } else {
-          _remoteStream ??= await webrtc.createLocalMediaStream('remote_stream');
-          _remoteStream!.addTrack(event.track);
-        }
-
-        remoteRenderer.srcObject = null;
-        remoteRenderer.srcObject = _remoteStream;
-
-        Future.microtask(() {
-          isRemoteVideoReady.value = true;
-        });
-      }
-
-      if (event.track.kind == 'audio') {
-        event.track.enabled = true;
-        webrtc.Helper.setSpeakerphoneOn(isSpeakerOn.value);
+      if (event.streams.isNotEmpty) {
+        _attachRemoteStream(event.streams[0]);
+      } else {
+        _remoteStream ??= await webrtc.createLocalMediaStream('remote_stream');
+        _remoteStream!.addTrack(event.track);
+        _attachRemoteStream(_remoteStream!);
       }
     };
 
     _peerConnection?.onAddStream = (webrtc.MediaStream stream) {
       debugPrint('📺 WebRTC onAddStream: stream.id=${stream.id}');
-      _remoteStream = stream;
-      remoteRenderer.srcObject = _remoteStream;
-      Future.microtask(() {
-        isRemoteVideoReady.value = true;
-      });
+      _attachRemoteStream(stream);
     };
 
     _peerConnection?.onIceCandidate = (webrtc.RTCIceCandidate candidate) {
@@ -367,8 +388,9 @@ class CallController extends GetxController {
 
     _peerConnection?.onIceConnectionState = (webrtc.RTCIceConnectionState state) {
       debugPrint('🧊 ICE Connection State: $state');
-      if (state == webrtc.RTCIceConnectionState.RTCIceConnectionStateFailed) {
-        debugPrint('⚠️ ICE Failed! Attempting ICE restart...');
+      if (state == webrtc.RTCIceConnectionState.RTCIceConnectionStateFailed ||
+          state == webrtc.RTCIceConnectionState.RTCIceConnectionStateDisconnected) {
+        debugPrint('⚠️ ICE Failed or Disconnected! Attempting ICE restart...');
         _peerConnection?.restartIce();
       }
     };

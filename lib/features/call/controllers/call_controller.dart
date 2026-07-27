@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as webrtc;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import '../../../core/services/local_service/shared_preferences_helper.dart';
 import '../../../routes/app_routes.dart';
 import '../service/foreground_call_service.dart';
@@ -102,14 +103,20 @@ class CallController extends GetxController {
     return true;
   }
 
-  void _startRingingVibration() {
-    _stopRingingVibration();
+  void _startRingingFeedback() {
+    _stopRingingFeedback();
+    
+    // Play system phone ringtone audio
+    FlutterRingtonePlayer().playRingtone();
+
+    // Haptic vibration feedback
     _vibrationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       HapticFeedback.vibrate();
     });
   }
 
-  void _stopRingingVibration() {
+  void _stopRingingFeedback() {
+    FlutterRingtonePlayer().stop();
     _vibrationTimer?.cancel();
     _vibrationTimer = null;
   }
@@ -159,13 +166,13 @@ class CallController extends GetxController {
         isRemoteVideoReady.value = false;
         callState.value = CallState.incoming;
 
-        _startRingingVibration();
+        _startRingingFeedback();
         Get.toNamed(AppRoutes.incomingCallScreen);
         break;
 
       case 'call_accepted':
         if (callState.value == CallState.outgoing) {
-          _stopRingingVibration();
+          _stopRingingFeedback();
           currentRoomId.value = msg['roomId'] ?? '';
           await _setupLocalMedia();
           await _createPeerConnection();
@@ -182,13 +189,13 @@ class CallController extends GetxController {
         break;
 
       case 'call_declined':
-        _stopRingingVibration();
+        _stopRingingFeedback();
         Get.snackbar('Call Declined', '${currentRemoteName.value} declined the call.', backgroundColor: Colors.red, colorText: Colors.white);
         endCall(notifyPeer: false);
         break;
 
       case 'end_call':
-        _stopRingingVibration();
+        _stopRingingFeedback();
         Get.snackbar('Call Ended', '${currentRemoteName.value} ended the call.', backgroundColor: Colors.orange, colorText: Colors.white);
         endCall(notifyPeer: false);
         break;
@@ -254,7 +261,7 @@ class CallController extends GetxController {
   }
 
   Future<void> acceptIncomingCall() async {
-    _stopRingingVibration();
+    _stopRingingFeedback();
     final hasPermissions = await checkAndRequestPermissions(video: isVideoCall.value);
     if (!hasPermissions) {
       declineIncomingCall();
@@ -280,7 +287,7 @@ class CallController extends GetxController {
   }
 
   void declineIncomingCall() {
-    _stopRingingVibration();
+    _stopRingingFeedback();
     signalingService.declineCall(callerId: currentRemoteUserId.value);
     endCall(notifyPeer: false);
   }
@@ -409,7 +416,7 @@ class CallController extends GetxController {
   }
 
   void endCall({bool notifyPeer = true}) {
-    _stopRingingVibration();
+    _stopRingingFeedback();
 
     if (notifyPeer && currentRemoteUserId.value.isNotEmpty) {
       signalingService.endCall(targetUserId: currentRemoteUserId.value);
@@ -447,7 +454,7 @@ class CallController extends GetxController {
 
   @override
   void onClose() {
-    _stopRingingVibration();
+    _stopRingingFeedback();
     endCall(notifyPeer: true);
     localRenderer.dispose();
     remoteRenderer.dispose();

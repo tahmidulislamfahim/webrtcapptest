@@ -27,6 +27,9 @@ dependencies:
   permission_handler: ^11.3.1
   flutter_foreground_task: ^8.1.0
 
+  # Ringtone Sound Player (Modern AGP 8+ version without jcenter)
+  flutter_ringtone_player: ^4.0.0+4
+
   # UI Utilities & Styling
   flutter_easyloading: ^3.0.5
   google_fonts: ^6.2.1

@@ -40,6 +40,9 @@ class SignalingService {
       _failedPings = 0;
       _startHeartbeat();
 
+      // Announce online status to backend over socket
+      sendMessage({'type': 'user_status', 'status': 'online', 'userId': userId, 'isOnline': true});
+
       _channel!.stream.listen(
         (message) {
           _failedPings = 0; // Reset failed count when any data arrives from server
@@ -105,11 +108,13 @@ class SignalingService {
   void _handleDisconnect() {
     _cleanUpSocket();
 
-    // Schedule auto-reconnect after network drop/switch
+    // Continually retry every 3 seconds until WebSocket is reconnected
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 2), () {
-      if (!isConnected && _lastUserId != null && _onMessageCallback != null) {
-        debugPrint('🔄 Auto-reconnecting WebSocket for user $_lastUserId...');
+    _reconnectTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (isConnected) {
+        timer.cancel();
+      } else if (_lastUserId != null && _onMessageCallback != null) {
+        debugPrint('🔄 Retrying WebSocket connection for user $_lastUserId...');
         connect(userId: _lastUserId!, onMessage: _onMessageCallback!);
       }
     });

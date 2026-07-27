@@ -76,6 +76,9 @@ class UsersScreen extends GetView<UsersController> {
             itemCount: controller.users.length,
             itemBuilder: (context, index) {
               final user = controller.users[index];
+              final isMe = user.id == controller.currentUserId.value;
+              final isOnline = isMe ? callController.signalingService.isConnected : user.isOnline;
+
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(14),
@@ -112,15 +115,15 @@ class UsersScreen extends GetView<UsersController> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: user.isOnline
+                                  color: isOnline
                                       ? AppColor.success.withValues(alpha: 0.2)
                                       : AppColor.border,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text(
-                                  user.isOnline ? 'Online' : 'Offline',
+                                  isOnline ? 'Online' : 'Offline',
                                   style: TextStyle(
-                                    color: user.isOnline ? AppColor.success : AppColor.textMuted,
+                                    color: isOnline ? AppColor.success : AppColor.textMuted,
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -137,7 +140,7 @@ class UsersScreen extends GetView<UsersController> {
                       ),
                     ),
                     // Action Buttons for Call
-                    if (user.isOnline) ...[
+                    if (isOnline && !isMe) ...[
                       IconButton(
                         icon: const Icon(Icons.phone, color: AppColor.primary, size: 22),
                         tooltip: 'Audio Call',

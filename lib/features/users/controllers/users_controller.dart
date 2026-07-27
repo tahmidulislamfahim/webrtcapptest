@@ -29,6 +29,11 @@ class UsersController extends GetxController {
     final uid = await SharedPreferencesHelper.getUserId();
     currentDisplayName.value = name ?? 'User';
     currentUserId.value = uid ?? '';
+
+    if (Get.isRegistered<CallController>()) {
+      Get.find<CallController>().connectSignaling();
+    }
+
     await loadUsers(showLoader: true);
   }
 
@@ -49,6 +54,43 @@ class UsersController extends GetxController {
     } finally {
       if (showLoader) isLoading.value = false;
     }
+  }
+
+  void handleUserStatusUpdate(Map<String, dynamic> msg) {
+    debugPrint('📢 User status socket message received: $msg');
+
+    final String targetId = (msg['userId'] ?? msg['id'] ?? msg['user_id'] ?? '').toString();
+    final rawStatus = msg['status'] ?? msg['isOnline'] ?? msg['is_online'];
+
+    bool isOnline = false;
+    if (rawStatus is bool) {
+      isOnline = rawStatus;
+    } else if (rawStatus is String) {
+      isOnline = rawStatus.toLowerCase() == 'online' || rawStatus.toLowerCase() == 'true' || rawStatus == '1';
+    } else if (rawStatus is int) {
+      isOnline = rawStatus == 1;
+    } else if (msg['type'] == 'user_online' || msg['type'] == 'user_connected') {
+      isOnline = true;
+    } else if (msg['type'] == 'user_offline' || msg['type'] == 'user_disconnected') {
+      isOnline = false;
+    }
+
+    if (targetId.isNotEmpty) {
+      final index = users.indexWhere((u) => u.id == targetId);
+      if (index != -1) {
+        final existing = users[index];
+        users[index] = UserModel(
+          id: existing.id,
+          username: existing.username,
+          displayName: existing.displayName,
+          isOnline: isOnline,
+        );
+        users.refresh();
+        return;
+      }
+    }
+
+    loadUsers(showLoader: false);
   }
 
   Future<void> logout() async {

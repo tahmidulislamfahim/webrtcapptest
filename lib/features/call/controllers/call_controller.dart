@@ -12,6 +12,7 @@ import '../../../core/services/local_service/shared_preferences_helper.dart';
 import '../../../routes/app_routes.dart';
 import '../service/foreground_call_service.dart';
 import '../service/signaling_service.dart';
+import '../../users/controllers/users_controller.dart';
 
 enum CallState { idle, outgoing, incoming, active }
 
@@ -249,6 +250,18 @@ class CallController extends GetxController with WidgetsBindingObserver {
             candidateData['sdpMLineIndex'] ?? 0,
           );
           await _addOrBufferIceCandidate(candidate);
+        }
+        break;
+
+      case 'user_status':
+      case 'user_status_changed':
+      case 'user_online':
+      case 'user_offline':
+      case 'user_connected':
+      case 'user_disconnected':
+      case 'status_update':
+        if (Get.isRegistered<UsersController>()) {
+          Get.find<UsersController>().handleUserStatusUpdate(msg);
         }
         break;
     }
